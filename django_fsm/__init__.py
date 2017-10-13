@@ -77,7 +77,8 @@ class ConcurrentTransition(Exception):
 
 
 class Transition(object):
-    def __init__(self, method, source, target, on_error, conditions, permission, custom):
+    def __init__(self, method, source, target, on_error, conditions, permission, 
+                 custom, exceptions_message):
         self.method = method
         self.source = source
         self.target = target
@@ -85,6 +86,7 @@ class Transition(object):
         self.conditions = conditions
         self.permission = permission
         self.custom = custom
+        self.exceptions_message = exceptions_message
 
     @property
     def name(self):
@@ -150,7 +152,8 @@ class FSMMeta(object):
             transition = self.transitions.get('+', None)
         return transition
 
-    def add_transition(self, method, source, target, on_error=None, conditions=[], permission=None, custom={}):
+    def add_transition(self, method, source, target, on_error=None, conditions=[], permission=None, 
+                        custom={}, exceptions_message={}):
         if source in self.transitions:
             raise AssertionError('Duplicate transition for {0} state'.format(source))
 
@@ -161,7 +164,8 @@ class FSMMeta(object):
             on_error=on_error,
             conditions=conditions,
             permission=permission,
-            custom=custom)
+            custom=custom,
+            exceptions_message=exceptions_message)
 
     def has_transition(self, state):
         """
@@ -214,6 +218,12 @@ class FSMMeta(object):
             raise TransitionNotAllowed('No transition from {0}'.format(current_state))
 
         return transition.on_error
+
+    def get_exception_message(self, method, source):
+        items = self.transitions.values()
+        for item in items:
+           if item.method == method:
+               return item.exceptions_message.get(source)
 
 
 class FSMFieldDescriptor(object):
@@ -294,9 +304,12 @@ class FSMFieldMixin(object):
         current_state = self.get_state(instance)
 
         if not meta.has_transition(current_state):
-            raise TransitionNotAllowed(
-                "Can't switch from state '{0}' using method '{1}'".format(current_state, method_name),
-                object=instance, method=method)
+            excepition_message = meta.get_exception_message(method, current_state)
+            if not excepition_message:
+                excepition_message = ("Can't switch from state '{0}'"
+                 "using method '{1}'".format(current_state, method_name))
+            raise TransitionNotAllowed(excepition_message,
+                                        object=instance, method=method)
         if not meta.conditions_met(instance, current_state):
             raise TransitionNotAllowed(
                 "Transition conditions have not been met for method '{0}'".format(method_name),
@@ -490,7 +503,8 @@ class ConcurrentTransitionMixin(object):
         self._update_initial_state()
 
 
-def transition(field, source='*', target=None, on_error=None, conditions=[], permission=None, custom={}):
+def transition(field, source='*', target=None, on_error=None, conditions=[], permission=None, custom={},
+                exceptions_message={}):
     """
     Method decorator for mark allowed transitions
 
@@ -506,9 +520,11 @@ def transition(field, source='*', target=None, on_error=None, conditions=[], per
 
         if isinstance(source, (list, tuple, set)):
             for state in source:
-                func._django_fsm.add_transition(func, state, target, on_error, conditions, permission, custom)
+                func._django_fsm.add_transition(func, state, target, on_error, conditions, permission, 
+                                                custom, exceptions_message)
         else:
-            func._django_fsm.add_transition(func, source, target, on_error, conditions, permission, custom)
+            func._django_fsm.add_transition(func, source, target, on_error, conditions, permission,
+                                             custom, exceptions_message)
 
         @wraps(func)
         def _change_state(instance, *args, **kwargs):
