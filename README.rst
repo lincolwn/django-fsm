@@ -384,6 +384,31 @@ ConcurrentTransitionMixin to cause a rollback of all the changes that
 have been executed in an inconsistent (out of sync) state, thus
 practically negating their effect.
 
+Transitions Messages
+--------------------
+
+In this forked version ``django-fsm`` provides support to custom messages to 
+transitions. ``transition`` decorator has a parameter called ``exceptions_message``
+that allow set all messages to state not allowed.
+``exceptions_message`` property is a ``dict`` containing all messages to not allowed 
+state target to transition. See below:
+
+.. code:: python
+
+    from django_fsm import transition
+    
+    PUBLISH_MESSAGES = {
+        'pubished': 'This post was published. You cannot republish it',
+        'destroyed': 'This post was destroyed.'
+    }
+    
+    @transition(field=state, source='new', target='published', exceptions_message=PUBLISH_MESSAGES)
+    def publish(self):
+        pass
+        
+When ``BlogPost`` instance has state set to ``published`` and you call ``publish`` method again,
+``TransitionNotAllowed`` will be raised with message: ``This post was published. You cannot republish it.``
+
 Drawing transitions
 -------------------
 
